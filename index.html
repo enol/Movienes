@@ -38,6 +38,12 @@ body{background:var(--bg);font-family:'DM Sans',sans-serif;color:var(--text);ove
 #title-search{background:#2a2a2a;border:1px solid #444;color:#fff;font-size:11px;padding:5px 10px 5px 28px;border-radius:4px;width:150px;font-family:'DM Sans',sans-serif;outline:none;}
 #title-search::placeholder{color:#666;}
 #title-search:focus{border-color:#888;}
+#zoom-tb{-webkit-appearance:none;width:80px;height:3px;border-radius:2px;background:#444;outline:none;cursor:pointer;flex-shrink:0;}
+#zoom-tb::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;border-radius:50%;background:var(--accent2);cursor:pointer;}
+#zoom-tb-val{color:#666;font-size:10px;min-width:28px;flex-shrink:0;}
+.fb-label{color:#666;font-size:10px;flex-shrink:0;white-space:nowrap;align-self:center;}
+.anime-chip{border-color:#7b68ee !important;color:#9d8fef;}
+.anime-chip.active{background:#4b3db0 !important;border-color:#7b68ee !important;color:#fff;}
 #ts-icon{position:absolute;left:8px;top:50%;transform:translateY(-50%);color:#555;pointer-events:none;display:flex;}
 #ts-clear{position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;color:#666;cursor:pointer;font-size:14px;display:none;line-height:1;padding:0;}
 #ts-clear.on{display:block;}
@@ -237,10 +243,17 @@ button,.movie-card,.filter-chip,.platform-pill{touch-action:manipulation;}
         <span class="dot" id="tmdb-dot"></span> TMDB
       </button>
       <button class="topbar-btn secondary" onclick="reloadAll()" title="Recargar">↻</button>
+      <input type="range" id="zoom-tb" min="60" max="200" value="108" step="4" oninput="onZoomChange(this.value)" title="Zoom carátulas">
+      <span id="zoom-tb-val">108</span>
       <div id="title-search-wrap">
         <span id="ts-icon"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="21" y2="21"/></svg></span>
         <input id="title-search" type="text" placeholder="Buscar título…" oninput="onTitleSearch(this.value)" onfocus="this.style.borderColor='#888'" onblur="this.style.borderColor='#444'">
         <button id="ts-clear" onclick="clearSearch()">✕</button>
+      </div>
+      <div id="era-topbar" style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+        <span style="color:#666;font-size:10px;white-space:nowrap">Época:</span>
+        <div class="era-slider-wrap" id="era-slider-wrap" style="width:100px;"><div id="era-track"></div><div id="era-fill"></div><div class="era-thumb" id="era-thumb-min" onmousedown="startEraThumb(event,'min')" ontouchstart="startEraThumb(event,'min')"></div><div class="era-thumb" id="era-thumb-max" onmousedown="startEraThumb(event,'max')" ontouchstart="startEraThumb(event,'max')"></div></div>
+        <span id="era-range-label" style="color:#888;font-size:10px;min-width:72px;white-space:nowrap">1950 — 2026</span>
       </div>
     </div>
     <button id="topbar-menu-btn" onclick="toggleDrawer()">☰</button>
@@ -343,6 +356,16 @@ let watchedOrder=JSON.parse(localStorage.getItem('mn_watched_order')||'[]');
 let discardedSet=new Set(JSON.parse(localStorage.getItem('mn_discarded')||'[]'));
 let discardedOrder=JSON.parse(localStorage.getItem('mn_discarded_order')||'[]');
 
+// ── ZOOM ──
+let cardZoom=108;
+function onZoomChange(v){
+  v=parseInt(v);cardZoom=v;
+  document.documentElement.style.setProperty('--tw',v+'px');
+  document.documentElement.style.setProperty('--th',Math.round(v*1.49)+'px');
+  const lbl=document.getElementById('zoom-tb-val');if(lbl)lbl.textContent=v;
+  const sl=document.getElementById('zoom-tb');if(sl)sl.value=v;
+}
+
 // ── PERSIST ──
 function saveWatched(){localStorage.setItem('mn_watched',JSON.stringify([...watchedSet]));localStorage.setItem('mn_watched_order',JSON.stringify(watchedOrder));}
 function saveDiscarded(){localStorage.setItem('mn_discarded',JSON.stringify([...discardedSet]));localStorage.setItem('mn_discarded_order',JSON.stringify(discardedOrder));}
@@ -387,11 +410,15 @@ const TV_GENRE_IDS=Object.fromEntries(Object.entries(TV_GENRES).map(([id,name])=
 function buildDiscoverUrl(mediaType,page,forNew){
   const isNew=forNew||viewMode==='new';
   const sort=(activeGenres.size>0&&!isNew)?'vote_average.desc':'release_date.desc';
-  const voteMin=sort==='vote_average.desc'?'&vote_count.gte=50':'&vote_count.gte=10';
-  // Convert genre names to IDs for this media type
+  const voteMin=sort==='vote_average.desc'?'&vote_count.gte=20':'&vote_count.gte=5';
+  // Anime special: keyword 210024 + genre 16 (Animation)
+  const isAnime=activeGenres.has('Anime');
+  const otherGenres=[...activeGenres].filter(g=>g!=='Anime');
   const gidMap=mediaType==='tv'?TV_GENRE_IDS:MOVIE_GENRE_IDS;
-  const genreIds=[...activeGenres].map(g=>gidMap[g]).filter(Boolean);
-  const genreParam=genreIds.length>0?`&with_genres=${genreIds.join(',')}`:'';
+  const genreIds=otherGenres.map(g=>gidMap[g]).filter(Boolean);
+  if(isAnime&&!genreIds.includes('16'))genreIds.push('16');
+  const genreParam=genreIds.length>0?`&with_genres=${[...new Set(genreIds)].join(',')}`:'';
+  const animeParam=isAnime?'&with_keywords=210024':'';
   // Provider: get all numeric IDs for selected provider ids (there can be duplicates like prime=9,119)
   const provIds=[];
   if(activeProviders.size>0){
@@ -403,10 +430,10 @@ function buildDiscoverUrl(mediaType,page,forNew){
   const eraParam=`&primary_release_date.gte=${eraMin}-01-01&primary_release_date.lte=${eraMax}-12-31`;
   const tvEra=`&first_air_date.gte=${eraMin}-01-01&first_air_date.lte=${eraMax}-12-31`;
   if(mediaType==='movie'){
-    return `/discover/movie?language=es-ES&region=ES&sort_by=${sort}${voteMin}&vote_average.gte=5&watch_region=ES&with_watch_monetization_types=flatrate&include_adult=false&page=${page}${genreParam}${provParam}${eraParam}`;
+    return `/discover/movie?language=es-ES&region=ES&sort_by=${sort}${voteMin}&vote_average.gte=5&watch_region=ES&with_watch_monetization_types=flatrate&include_adult=false&page=${page}${genreParam}${animeParam}${provParam}${eraParam}`;
   } else {
     const tvSort=sort==='vote_average.desc'?'vote_average.desc':'first_air_date.desc';
-    return `/discover/tv?language=es-ES&sort_by=${tvSort}&vote_count.gte=10&vote_average.gte=5&watch_region=ES&with_watch_monetization_types=flatrate&include_adult=false&page=${page}${genreParam}${provParam}${tvEra}`;
+    return `/discover/tv?language=es-ES&sort_by=${tvSort}&vote_count.gte=10&vote_average.gte=5&watch_region=ES&with_watch_monetization_types=flatrate&include_adult=false&page=${page}${genreParam}${animeParam}${provParam}${tvEra}`;
   }
 }
 
@@ -624,22 +651,14 @@ function renderFilterBar(){
   // Platforms
   const platHtml=PICKER_PLATFORMS.map(p=>`<button class="filter-chip${activeProviders.has(p.id)?' active':''}" onclick="toggleProvider('${p.id}')">${escHtml(p.name)}</button>`).join('');
 
-  // Genres (combined)
+  // Genres (combined) — Anime special chip first
   const allGenres={...MOVIE_GENRES,...TV_GENRES};
   const uniq=[...new Set(Object.values(allGenres))].sort();
-  const genreHtml=uniq.map(g=>`<button class="filter-chip${activeGenres.has(g)?' active':''}" onclick="toggleGenre('${escHtml(g)}')">${escHtml(g)}</button>`).join('');
+  const animeActive=activeGenres.has('Anime');
+  const animeChip=`<button class="filter-chip anime-chip${animeActive?' active':''}" onclick="toggleGenre('Anime')">🎌 Anime</button>`;
+  const genreHtml=animeChip+uniq.map(g=>`<button class="filter-chip${activeGenres.has(g)?' active':''}" onclick="toggleGenre('${escHtml(g)}')">${escHtml(g)}</button>`).join('');
 
-  // Era slider
-  const eraHtml=`<div id="era-wrap">
-    <span id="era-label">Época:</span>
-    <div class="era-slider-wrap" id="era-slider-wrap">
-      <div id="era-track"></div>
-      <div id="era-fill"></div>
-      <div class="era-thumb" id="era-thumb-min" onmousedown="startEraThumb(event,'min')" ontouchstart="startEraThumb(event,'min')"></div>
-      <div class="era-thumb" id="era-thumb-max" onmousedown="startEraThumb(event,'max')" ontouchstart="startEraThumb(event,'max')"></div>
-    </div>
-    <span id="era-range-label">${eraMin} — ${eraMax}</span>
-  </div>`;
+
 
   // View modes
   const newCls=viewMode==='new'?'mode-chip active-new':'mode-chip';
@@ -661,12 +680,10 @@ function renderFilterBar(){
       <div class="filter-sep"></div>
       <button class="filter-toggle-btn ${showPlatforms?'on':'off'}" onclick="toggleShowPlatforms()">${eyeSvg} Plataformas</button>
       <button class="filter-toggle-btn ${showRatings?'on':'off'}" onclick="toggleShowRatings()">${starSvg} Nota</button>
-      <div class="filter-sep"></div>
-      ${eraHtml}
       ${hasActive?`<button class="filter-clear" onclick="clearFilters()">✕ Limpiar</button>`:''}
     </div>
-    <div class="fb-row2">${platHtml}</div>
-    <div class="fb-row3">${genreHtml}</div>
+    <div class="fb-row2"><button class="filter-toggle-btn ${showPlatforms?'on':'off'}" onclick="toggleShowPlatforms()" style="flex-shrink:0">${eyeSvg} Plataformas</button><div class="filter-sep" style="height:16px;margin:0 4px"></div>${platHtml}</div>
+    <div class="fb-row3"><span class="fb-label">Géneros:</span>${genreHtml}</div>
   `;
   updateEraSlider();
 }
@@ -952,6 +969,7 @@ function detectTizen(){if(navigator.userAgent.includes('Tizen')||navigator.userA
 window.addEventListener('load',async()=>{
   detectTizen();
   updateDots();
+  onZoomChange(108);
   renderFilterBar();
   adjustLayout();
   // Seed order from existing sets
