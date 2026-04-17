@@ -247,8 +247,8 @@ button,.movie-card,.filter-chip,.platform-pill{touch-action:manipulation;}
         <span class="dot" id="tmdb-dot"></span> TMDB
       </button>
       <label>Zoom:</label>
-      <input type="range" id="zoom-slider" min="40" max="100" value="65" step="5" oninput="onSliderZoom(this.value)">
-      <span id="zoom-val">65%</span>
+      <input type="range" id="zoom-slider" min="40" max="100" value="100" step="5" oninput="onSliderZoom(this.value)">
+      <span id="zoom-val">100%</span>
       <button class="topbar-btn secondary" onclick="resetView()" title="Centrar vista">⌖</button>
       <button class="topbar-btn secondary" onclick="reloadAll()" title="Recargar">↻</button>
       <div id="title-search-wrap">
@@ -271,8 +271,8 @@ button,.movie-card,.filter-chip,.platform-pill{touch-action:manipulation;}
     </div>
     <div class="drawer-row" style="align-items:center">
       <label style="color:#aaa;font-size:12px">Zoom:</label>
-      <input type="range" id="zoom-slider2" min="40" max="100" value="65" step="5" style="flex:1" oninput="onSliderZoom(this.value)">
-      <span id="zoom-val2" style="color:#aaa;font-size:11px;min-width:36px">65%</span>
+      <input type="range" id="zoom-slider2" min="40" max="100" value="100" step="5" style="flex:1" oninput="onSliderZoom(this.value)">
+      <span id="zoom-val2" style="color:#aaa;font-size:11px;min-width:36px">100%</span>
     </div>
     <div class="drawer-row">
       <input id="title-search-drawer" type="text" placeholder="Buscar título…"
@@ -400,13 +400,13 @@ let viewMode=null;
 // ═════════════════════════════════════════════════════════
 // PAN / ZOOM ENGINE (Figma-style)
 // ═════════════════════════════════════════════════════════
-let _cx=60,_cy=120,_cz=0.65;
+let _cx=60,_cy=120,_cz=1.0;
 let _panning=false,_panStartX=0,_panStartY=0,_panOriginX=0,_panOriginY=0;
 let _spaceDown=false;
 let _touches=[],_pinchDist0=0,_pinchZ0=0,_pinchCx0=0,_pinchCy0=0;
 const MIN_Z=0.15,MAX_Z=2.0;
 
-function resetView(){_cx=60;_cy=120;_cz=0.65;applyTransform(true);}
+function resetView(){_cx=60;_cy=120;_cz=1.0;applyTransform(true);}
 
 let _rafPending=false;
 function applyTransform(animate=false){
@@ -576,10 +576,10 @@ async function tmdbGet(path){
 
 async function fetchPage(page,genreId,byRating){
   const sort=byRating?'vote_average.desc':'release_date.desc';
-  const vm=byRating?'&vote_count.gte=80':'';
   const gp=genreId?`&with_genres=${genreId}`:'';
   const pp=activeProvider?`&with_watch_providers=${getProvId(activeProvider)}`:'';
-  const d=await tmdbGet(`/discover/movie?language=es-ES&region=ES&sort_by=${sort}${vm}&watch_region=ES&with_watch_monetization_types=flatrate&include_adult=false&page=${page}${gp}${pp}`);
+  // Always filter <5 and require minimum vote count for reliability
+  const d=await tmdbGet(`/discover/movie?language=es-ES&region=ES&sort_by=${sort}&vote_average.gte=5&vote_count.gte=20&watch_region=ES&with_watch_monetization_types=flatrate&include_adult=false&page=${page}${gp}${pp}`);
   return(d?.results||[]).filter(x=>x.poster_path);
 }
 function getProvId(pid){const e=Object.entries(PROVIDER_MAP).find(([,v])=>v.id===pid);return e?e[0]:null;}
@@ -638,14 +638,24 @@ async function loadMovies(){
     setLoading(false);
     renderGrid();
     adjustFilterTop();
-    // Background: load rest
+    // Background: load rest of providers + runtime for all
     (async()=>{
       for(let i=bsz;i<allMovies.length;i++){
         if(_loadingAbort)return;
         allMovies[i]._providers=await fetchProviders(allMovies[i].id);
-        // update card platforms
         const el=document.querySelector(`.movie-card[data-id="${allMovies[i].id}"] .card-platforms`);
         if(el)el.innerHTML=renderPlatformPills(allMovies[i]);
+      }
+      // Lazy-load runtime for all cards
+      for(let i=0;i<allMovies.length;i++){
+        if(_loadingAbort)return;
+        if(allMovies[i]._runtime!==undefined)continue;
+        const d=await fetchDetails(allMovies[i].id);
+        if(d){allMovies[i]._runtime=d.runtime||null;allMovies[i]._overview=d.overview||'';}
+        // Update meta on card
+        const metaEl=document.querySelector(`.movie-card[data-id="${allMovies[i].id}"] .card-meta`);
+        const yr=(allMovies[i].release_date||'').slice(0,4);
+        if(metaEl)metaEl.textContent=yr+(allMovies[i]._runtime?` · ${allMovies[i]._runtime} min`:'');
       }
     })();
   },180);
@@ -678,22 +688,25 @@ async function toggleViewMode(mode){
 }
 
 async function loadNewMovies(){
-  // NEW: latest streaming movies by release_date.desc, no genre filter, just date
+  // NEW: latest streaming movies with good ratings, sorted by rating desc
   if(!getKey()){setLoading(false);setEmptyMsg('Añade tu API Key de TMDB para empezar');showEmpty(true);return;}
   _loadingAbort=false;allMovies=[];
   setLoading(true,'Cargando novedades…');setLoadingBar(0);
   const pp=activeProvider?`&with_watch_providers=${getProvId(activeProvider)}`:'';
+  // Sort by release_date but filter low-rated; then client-sort by rating
   let page=1,collected=[];
   while(collected.length<maxCount&&page<=6){
     if(_loadingAbort)return;
     setLoadingBar(Math.round(collected.length/maxCount*60));
     setLoadingText(`Página ${page}…`);
-    const d=await tmdbGet(`/discover/movie?language=es-ES&region=ES&sort_by=release_date.desc&watch_region=ES&with_watch_monetization_types=flatrate&include_adult=false&page=${page}${pp}`);
+    const d=await tmdbGet(`/discover/movie?language=es-ES&region=ES&sort_by=release_date.desc&vote_average.gte=5&vote_count.gte=20&watch_region=ES&with_watch_monetization_types=flatrate&include_adult=false&page=${page}${pp}`);
     const batch=(d?.results||[]).filter(x=>x.poster_path);
     if(!batch.length)break;
     collected=[...collected,...batch];
     page++;
   }
+  // Sort collected by vote_average desc (highest rated first)
+  collected.sort((a,b)=>(b.vote_average||0)-(a.vote_average||0));
   allMovies=collected.slice(0,maxCount);
   setLoadingBar(65);
   if(!allMovies.length){setLoading(false);setEmptyMsg('Sin novedades disponibles');showEmpty(true);return;}
@@ -707,7 +720,10 @@ async function loadNewMovies(){
   setLoadingBar(100);
   setTimeout(()=>{
     setLoading(false);renderGrid();adjustFilterTop();
-    (async()=>{for(let i=bsz;i<allMovies.length;i++){if(_loadingAbort)return;allMovies[i]._providers=await fetchProviders(allMovies[i].id);const el=document.querySelector(`.movie-card[data-id="${allMovies[i].id}"] .card-platforms`);if(el)el.innerHTML=renderPlatformPills(allMovies[i]);}})();
+    (async()=>{
+      for(let i=bsz;i<allMovies.length;i++){if(_loadingAbort)return;allMovies[i]._providers=await fetchProviders(allMovies[i].id);const el=document.querySelector(`.movie-card[data-id="${allMovies[i].id}"] .card-platforms`);if(el)el.innerHTML=renderPlatformPills(allMovies[i]);}
+      for(let i=0;i<allMovies.length;i++){if(_loadingAbort)return;if(allMovies[i]._runtime!==undefined)continue;const d=await fetchDetails(allMovies[i].id);if(d){allMovies[i]._runtime=d.runtime||null;allMovies[i]._overview=d.overview||'';}const metaEl=document.querySelector(`.movie-card[data-id="${allMovies[i].id}"] .card-meta`);const yr=(allMovies[i].release_date||'').slice(0,4);if(metaEl)metaEl.textContent=yr+(allMovies[i]._runtime?` · ${allMovies[i]._runtime} min`:'');}
+    })();
   },180);
 }
 
