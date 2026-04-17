@@ -307,22 +307,20 @@ const FA_ICON='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAPEAAADxCAIAAACVqcZ
 const MIN_YEAR=1950;
 const MAX_YEAR=new Date().getFullYear();
 
+// Provider numeric IDs verified for Spain (ES) flatrate.
+// Use TMDB provider list: https://www.themoviedb.org/settings/streaming-services
 const PROVIDER_MAP={
-  8:  {id:'netflix', name:'Netflix',    logo:'/t2yyOv40HZeVlLjYsCsPHnWLk4W.jpg'},
-  119:{id:'prime',   name:'Prime',      logo:'/dQeAar5H991VYporEjUspolDarG.jpg'},
-  9:  {id:'prime',   name:'Prime',      logo:'/dQeAar5H991VYporEjUspolDarG.jpg'},
-  337:{id:'disney',  name:'Disney+',    logo:'/7rwgEs15tFwyR9NPQ5vpzxTj19Q.jpg'},
-  384:{id:'max',     name:'Max',        logo:'/Ajqyt5aNxNvaG0maqS5YpZA7GR2.jpg'},
-  350:{id:'apple',   name:'Apple TV+',  logo:'/peURlLlr8jggOwK53fJ5wdQl05y.jpg'},
-  2:  {id:'apple',   name:'Apple TV+',  logo:'/peURlLlr8jggOwK53fJ5wdQl05y.jpg'},
-  1773:{id:'sky',   name:'SkyShowtime', logo:'/dUFUaFPkDEarjJNFRGJuX2dGD0m.jpg'},
-  149:{id:'mplus',   name:'Movistar+',  logo:'/iNRmKLo5YSBOdUOtECaYfjeUBqL.jpg'},
-  567:{id:'mplus',   name:'Movistar+',  logo:'/iNRmKLo5YSBOdUOtECaYfjeUBqL.jpg'},
-  63: {id:'filmin',  name:'Filmin',     logo:'/2Me8rEfFKYMCGzjz4pjePRo6bqR.jpg'},
-  1985:{id:'atres', name:'Atresplayer', logo:'/hFkiWuBbPLiI2MWKDM2dRvRrFCR.jpg'},
-  62: {id:'mubi',    name:'MUBI',       logo:'/bVR4Z1LCHY7gidXAQF3Q5SZYEIq.jpg'},
-  2239:{id:'rtve',  name:'RTVE Play',   logo:'/pq8p1umEnFCdV9hEUCYQxE5UCGR.jpg'},
-  541:{id:'rtve',   name:'RTVE Play',   logo:'/pq8p1umEnFCdV9hEUCYQxE5UCGR.jpg'},
+  8:   {id:'netflix', name:'Netflix',     logo:'/t2yyOv40HZeVlLjYsCsPHnWLk4W.jpg'},
+  119: {id:'prime',   name:'Prime Video', logo:'/dQeAar5H991VYporEjUspolDarG.jpg'},
+  337: {id:'disney',  name:'Disney+',     logo:'/7rwgEs15tFwyR9NPQ5vpzxTj19Q.jpg'},
+  1899:{id:'max',     name:'Max',         logo:'/Ajqyt5aNxNvaG0maqS5YpZA7GR2.jpg'},
+  350: {id:'apple',   name:'Apple TV+',   logo:'/peURlLlr8jggOwK53fJ5wdQl05y.jpg'},
+  1773:{id:'sky',     name:'SkyShowtime', logo:'/dUFUaFPkDEarjJNFRGJuX2dGD0m.jpg'},
+  149: {id:'mplus',   name:'Movistar+',   logo:'/iNRmKLo5YSBOdUOtECaYfjeUBqL.jpg'},
+  63:  {id:'filmin',  name:'Filmin',      logo:'/2Me8rEfFKYMCGzjz4pjePRo6bqR.jpg'},
+  62:  {id:'mubi',    name:'MUBI',        logo:'/bVR4Z1LCHY7gidXAQF3Q5SZYEIq.jpg'},
+  2239:{id:'rtve',    name:'RTVE Play',   logo:'/pq8p1umEnFCdV9hEUCYQxE5UCGR.jpg'},
+  1985:{id:'atres',   name:'Atresplayer', logo:'/hFkiWuBbPLiI2MWKDM2dRvRrFCR.jpg'},
 };
 function pLogo(p){return 'https://image.tmdb.org/t/p/w45'+p.logo;}
 const PICKER_PLATFORMS=Object.values(
@@ -430,24 +428,27 @@ function buildDiscoverUrl(mediaType,page,forNew){
   const eraParam=`&primary_release_date.gte=${eraMin}-01-01&primary_release_date.lte=${eraMax}-12-31`;
   const tvEra=`&first_air_date.gte=${eraMin}-01-01&first_air_date.lte=${eraMax}-12-31`;
   if(mediaType==='movie'){
-    return `/discover/movie?language=es-ES&region=ES&sort_by=${sort}${voteMin}&vote_average.gte=5&watch_region=ES&with_watch_monetization_types=flatrate&include_adult=false&page=${page}${genreParam}${animeParam}${provParam}${eraParam}`;
+    return `/discover/movie?language=es-ES&region=ES&sort_by=${sort}${voteMin}&vote_average.gte=5&watch_region=ES&with_watch_monetization_types=flatrate&with_watch_provider_regions=ES&include_adult=false&page=${page}${genreParam}${animeParam}${provParam}${eraParam}`;
   } else {
     const tvSort=sort==='vote_average.desc'?'vote_average.desc':'first_air_date.desc';
-    return `/discover/tv?language=es-ES&sort_by=${tvSort}&vote_count.gte=10&vote_average.gte=5&watch_region=ES&with_watch_monetization_types=flatrate&include_adult=false&page=${page}${genreParam}${animeParam}${provParam}${tvEra}`;
+    return `/discover/tv?language=es-ES&sort_by=${tvSort}&vote_count.gte=10&vote_average.gte=5&watch_region=ES&with_watch_monetization_types=flatrate&with_watch_provider_regions=ES&include_adult=false&page=${page}${genreParam}${animeParam}${provParam}${tvEra}`;
   }
 }
 
 async function fetchPageItems(page,forNew){
   const types=mediaTypeFilter?[mediaTypeFilter]:['movie','tv'];
   let results=[];
+  let maxTP=1;
   for(const t of types){
     const url=buildDiscoverUrl(t,page,forNew);
     const d=await tmdbGet(url);
     if(d){
-      totalPages=Math.max(1,Math.min(d.total_pages||1,500));
+      const tp=Math.max(1,Math.min(d.total_pages||1,500));
+      if(tp>maxTP)maxTP=tp; // keep highest total_pages across types
       (d.results||[]).filter(x=>x.poster_path).forEach(x=>{x._mediaType=t;results.push(x);});
     }
   }
+  totalPages=maxTP;
   // Sort by vote_average desc if genre filtered, else by date desc
   if(activeGenres.size>0&&!forNew) results.sort((a,b)=>(b.vote_average||0)-(a.vote_average||0));
   else results.sort((a,b)=>{
@@ -478,19 +479,28 @@ async function fetchProviders(tmdbId,mediaType){
 async function loadMovies(reset){
   if(!getKey()){setLoading(false);showEmpty('Añade tu API Key de TMDB para empezar');return;}
   if(reset){
-    _loadingAbort=false;currentPage=1;allItems=[];_searchResults=[];
+    _loadingAbort=false;currentPage=1;totalPages=999;allItems=[];_searchResults=[];
     clearGrid();setLoading(true,'Cargando…');setLoadingBar(0);
   }
+  if(isLoadingMore&&!reset)return;
   isLoadingMore=true;
   const isNew=viewMode==='new';
-  // On reset, fetch 4 pages in parallel to get ~100 items fast
-  const pagesToFetch=reset?[1,2,3,4]:[currentPage];
-  if(reset)currentPage=5;
   let allFetched=[];
-  await Promise.all(pagesToFetch.map(async pg=>{
-    const items=await fetchPageItems(pg,isNew);
-    allFetched.push(...items);
-  }));
+  if(reset){
+    // Page 1 first to get real totalPages, then 3 more in parallel
+    const first=await fetchPageItems(1,isNew);
+    allFetched.push(...first);
+    currentPage=2;
+    if(totalPages>=2){
+      const extra=await Promise.all([2,3,4].filter(p=>p<=totalPages).map(pg=>fetchPageItems(pg,isNew)));
+      extra.forEach(batch=>allFetched.push(...batch));
+      currentPage=Math.min(5,totalPages+1);
+    }
+  } else {
+    const batch=await fetchPageItems(currentPage,isNew);
+    allFetched.push(...batch);
+    currentPage++;
+  }
   if(_loadingAbort){isLoadingMore=false;return;}
   // Sort combined results
   if(activeGenres.size>0&&!isNew) allFetched.sort((a,b)=>(b.vote_average||0)-(a.vote_average||0));
@@ -498,7 +508,6 @@ async function loadMovies(reset){
   // Deduplicate
   const seen=new Set(allItems.map(x=>String(x.id)));
   const toShow=allFetched.filter(x=>!seen.has(String(x.id))&&!discardedSet.has(String(x.id))&&!watchedSet.has(String(x.id)));
-  if(!reset) currentPage++;
   allItems=[...allItems,...toShow];
   setLoadingBar(80);
   // Load providers for first batch
@@ -546,11 +555,18 @@ async function reloadAll(){
 // Infinite scroll via IntersectionObserver
 const sentinel=document.getElementById('load-sentinel');
 const observer=new IntersectionObserver(entries=>{
-  if(entries[0].isIntersecting&&!isLoadingMore&&viewMode===null&&currentPage<=totalPages&&!searchQuery){
+  const canLoad=entries[0].isIntersecting
+    &&!isLoadingMore
+    &&(viewMode===null||viewMode==='new')
+    &&currentPage<=totalPages
+    &&!searchQuery
+    &&viewMode!=='watched'
+    &&viewMode!=='discarded';
+  if(canLoad){
     document.getElementById('load-more-indicator').classList.add('on');
     loadMovies(false).then(()=>document.getElementById('load-more-indicator').classList.remove('on'));
   }
-},{rootMargin:'200px'});
+},{rootMargin:'400px'});
 observer.observe(sentinel);
 
 // ── WATCHED / DISCARDED VIEWS ──
