@@ -272,6 +272,21 @@ button,.movie-card,.filter-chip,.platform-pill{touch-action:manipulation;}
         style="flex:1;background:#2a2a2a;border:1px solid #444;color:#fff;font-size:12px;padding:8px 10px;border-radius:4px;font-family:'DM Sans',sans-serif;outline:none;"
         oninput="onTitleSearch(this.value)">
     </div>
+    <div class="drawer-row" style="align-items:center;gap:8px">
+      <label style="color:#aaa;font-size:12px;flex-shrink:0">Zoom:</label>
+      <input type="range" id="zoom-tb-drawer" min="60" max="200" value="108" step="4" style="flex:1;-webkit-appearance:none;height:3px;border-radius:2px;background:#444;outline:none;cursor:pointer;" oninput="onZoomChange(this.value)">
+      <span id="zoom-tb-val-drawer" style="color:#aaa;font-size:11px;min-width:28px">108</span>
+    </div>
+    <div class="drawer-row" style="align-items:center;gap:8px">
+      <label style="color:#aaa;font-size:12px;flex-shrink:0">Época:</label>
+      <div class="era-slider-wrap" id="era-slider-wrap-drawer" style="flex:1;height:20px;position:relative;">
+        <div id="era-track-d" style="position:absolute;top:50%;left:0;right:0;height:3px;transform:translateY(-50%);background:#333;border-radius:2px;"></div>
+        <div id="era-fill-d" style="position:absolute;top:50%;height:3px;transform:translateY(-50%);background:var(--accent2);border-radius:2px;"></div>
+        <div id="era-thumb-min-d" style="position:absolute;top:50%;width:14px;height:14px;border-radius:50%;background:var(--accent2);border:2px solid #fff;transform:translate(-50%,-50%);cursor:pointer;z-index:2;" onmousedown="startEraThumbDrawer(event,'min')" ontouchstart="startEraThumbDrawer(event,'min')"></div>
+        <div id="era-thumb-max-d" style="position:absolute;top:50%;width:14px;height:14px;border-radius:50%;background:var(--accent2);border:2px solid #fff;transform:translate(-50%,-50%);cursor:pointer;z-index:2;" onmousedown="startEraThumbDrawer(event,'max')" ontouchstart="startEraThumbDrawer(event,'max')"></div>
+      </div>
+      <span id="era-range-label-drawer" style="color:#aaa;font-size:11px;min-width:72px">1950 — 2026</span>
+    </div>
   </div>
 </div>
 
@@ -360,8 +375,8 @@ function onZoomChange(v){
   v=parseInt(v);cardZoom=v;
   document.documentElement.style.setProperty('--tw',v+'px');
   document.documentElement.style.setProperty('--th',Math.round(v*1.49)+'px');
-  const lbl=document.getElementById('zoom-tb-val');if(lbl)lbl.textContent=v;
-  const sl=document.getElementById('zoom-tb');if(sl)sl.value=v;
+  ['zoom-tb-val','zoom-tb-val-drawer'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent=v;});
+  ['zoom-tb','zoom-tb-drawer'].forEach(id=>{const el=document.getElementById(id);if(el)el.value=v;});
 }
 
 // ── PERSIST ──
@@ -524,11 +539,8 @@ async function loadMovies(reset){
   hideEmpty();
   appendCards(toShow);
   isLoadingMore=false;
-  // On large screens the sentinel may still be visible after first load — trigger more if needed
-  if(reset) setTimeout(()=>{
-    const s=document.getElementById('load-sentinel');
-    if(s){const r=s.getBoundingClientRect();if(r.top<window.innerHeight+800&&currentPage<=totalPages&&!isLoadingMore){loadMovies(false);}}
-  },300);
+  // On large screens sentinel may be in viewport — check after render
+  if(reset) setTimeout(checkLoadMore,300);
   // Background: rest of providers
   (async()=>{
     for(let i=bsz;i<toShow.length;i++){
@@ -563,40 +575,47 @@ async function reloadAll(){
   else loadMovies(true);
 }
 
-// Infinite scroll via IntersectionObserver
-const sentinel=document.getElementById('load-sentinel');
-const observer=new IntersectionObserver(entries=>{
-  const canLoad=entries[0].isIntersecting
-    &&!isLoadingMore
-    &&viewMode!=='watched'
-    &&viewMode!=='discarded'
-    &&currentPage<=totalPages
-    &&!searchQuery;
-  if(canLoad){
+// Infinite scroll — IntersectionObserver + window scroll fallback for desktop
+function checkLoadMore(){
+  if(isLoadingMore) return;
+  if(viewMode==='watched'||viewMode==='discarded'||searchQuery) return;
+  if(currentPage>totalPages) return;
+  const s=document.getElementById('load-sentinel');
+  if(!s) return;
+  const r=s.getBoundingClientRect();
+  if(r.top<=window.innerHeight+800){
     document.getElementById('load-more-indicator').classList.add('on');
     loadMovies(false).then(()=>document.getElementById('load-more-indicator').classList.remove('on'));
   }
-},{rootMargin:'600px'});
+}
+window.addEventListener('scroll',checkLoadMore,{passive:true});
+// Also keep IntersectionObserver as primary trigger
+const sentinel=document.getElementById('load-sentinel');
+const observer=new IntersectionObserver(entries=>{
+  if(entries[0].isIntersecting) checkLoadMore();
+},{rootMargin:'800px'});
 observer.observe(sentinel);
 
 // ── WATCHED / DISCARDED VIEWS ──
 let _specialCache=[];
 
 async function loadWatchedItems(){
-  if(!watchedOrder.length){setLoading(false);showEmpty('No has marcado ninguna película como vista todavía');return;}
+  isLoadingMore=false; // reset in case previous load was interrupted
+  if(!watchedOrder.length){setLoading(false);showEmpty('Aún no has marcado ninguna película como vista');return;}
   _loadingAbort=false;allItems=[];clearGrid();setLoading(true,'Cargando vistas…');setLoadingBar(0);
   const ids=[...watchedOrder].reverse().slice(0,100);
-  await loadSpecialItems(ids,'vistas');
+  await loadSpecialItems(ids);
 }
 
 async function loadDiscardedItems(){
+  isLoadingMore=false;
   if(!discardedOrder.length){setLoading(false);showEmpty('No has descartado ninguna película todavía');return;}
   _loadingAbort=false;allItems=[];clearGrid();setLoading(true,'Cargando cuarentena…');setLoadingBar(0);
   const ids=[...discardedOrder].reverse().slice(0,100);
-  await loadSpecialItems(ids,'cuarentena');
+  await loadSpecialItems(ids);
 }
 
-async function loadSpecialItems(ids,label){
+async function loadSpecialItems(ids){
   const results=[];
   for(let i=0;i<ids.length;i++){
     if(_loadingAbort)return;
@@ -737,14 +756,39 @@ function toggleShowRatings(){showRatings=!showRatings;renderFilterBar();document
 // ── ERA SLIDER ──
 let _eraThumbActive=null;
 function updateEraSlider(){
-  const wrap=document.getElementById('era-slider-wrap');if(!wrap)return;
   const total=MAX_YEAR-MIN_YEAR;
   const minPct=(eraMin-MIN_YEAR)/total*100;
   const maxPct=(eraMax-MIN_YEAR)/total*100;
+  // Main topbar slider
   const fill=document.getElementById('era-fill');if(fill){fill.style.left=minPct+'%';fill.style.width=(maxPct-minPct)+'%';}
   const tmin=document.getElementById('era-thumb-min');if(tmin)tmin.style.left=minPct+'%';
   const tmax=document.getElementById('era-thumb-max');if(tmax)tmax.style.left=maxPct+'%';
-  const lbl=document.getElementById('era-range-label');if(lbl)lbl.textContent=eraMin+' — '+eraMax;
+  // Drawer slider
+  const fillD=document.getElementById('era-fill-d');if(fillD){fillD.style.left=minPct+'%';fillD.style.width=(maxPct-minPct)+'%';}
+  const tminD=document.getElementById('era-thumb-min-d');if(tminD)tminD.style.left=minPct+'%';
+  const tmaxD=document.getElementById('era-thumb-max-d');if(tmaxD)tmaxD.style.left=maxPct+'%';
+  // Labels
+  ['era-range-label','era-range-label-drawer'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent=eraMin+' — '+eraMax;});
+}
+function startEraThumbDrawer(e,which){
+  e.preventDefault();
+  const move=ev=>{
+    const wrap=document.getElementById('era-slider-wrap-drawer');if(!wrap)return;
+    const rect=wrap.getBoundingClientRect();
+    const clientX=ev.touches?ev.touches[0].clientX:ev.clientX;
+    const pct=Math.max(0,Math.min(1,(clientX-rect.left)/rect.width));
+    const year=Math.round(MIN_YEAR+pct*(MAX_YEAR-MIN_YEAR));
+    if(which==='min'){eraMin=Math.min(year,eraMax-1);}else{eraMax=Math.max(year,eraMin+1);}
+    updateEraSlider();
+  };
+  const up=()=>{
+    document.removeEventListener('mousemove',move);document.removeEventListener('mouseup',up);
+    document.removeEventListener('touchmove',move);document.removeEventListener('touchend',up);
+    if(viewMode==='new'){viewMode=null;renderFilterBar();}
+    loadMovies(true);
+  };
+  document.addEventListener('mousemove',move);document.addEventListener('mouseup',up);
+  document.addEventListener('touchmove',move,{passive:false});document.addEventListener('touchend',up);
 }
 function startEraThumb(e,which){
   e.preventDefault();_eraThumbActive=which;
