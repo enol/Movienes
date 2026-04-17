@@ -444,12 +444,13 @@ async function fetchPageItems(page,forNew){
     const d=await tmdbGet(url);
     if(d){
       const tp=Math.max(1,Math.min(d.total_pages||1,500));
-      if(tp>maxTP)maxTP=tp; // keep highest total_pages across types
+      if(tp>maxTP)maxTP=tp;
       (d.results||[]).filter(x=>x.poster_path).forEach(x=>{x._mediaType=t;results.push(x);});
     }
   }
-  totalPages=maxTP;
-  // Sort by vote_average desc if genre filtered, else by date desc
+  // Only update totalPages from page 1 — parallel pages must not race-overwrite it
+  if(page===1) totalPages=maxTP;
+  // Sort
   if(activeGenres.size>0&&!forNew) results.sort((a,b)=>(b.vote_average||0)-(a.vote_average||0));
   else results.sort((a,b)=>{
     const da=(a.release_date||a.first_air_date||'');
@@ -479,19 +480,20 @@ async function fetchProviders(tmdbId,mediaType){
 async function loadMovies(reset){
   if(!getKey()){setLoading(false);showEmpty('Añade tu API Key de TMDB para empezar');return;}
   if(isLoadingMore&&!reset) return;
+  isLoadingMore=true; // set synchronously BEFORE any await — prevents observer race on wide screens
   if(reset){
     _loadingAbort=false;currentPage=1;totalPages=999;allItems=[];_searchResults=[];
     clearGrid();setLoading(true,'Cargando…');setLoadingBar(0);
   }
-  isLoadingMore=true;
   const isNew=viewMode==='new';
   let allFetched=[];
   if(reset){
-    // Always fetch page 1 first so totalPages is known, then pages 2-4 in parallel
+    // Page 1 first — this sets totalPages (only page 1 writes it)
     const first=await fetchPageItems(1,isNew);
     if(_loadingAbort){isLoadingMore=false;return;}
     allFetched.push(...first);
     if(totalPages>=2){
+      // Pages 2-4 in parallel — they do NOT overwrite totalPages
       const extraPages=[2,3,4].filter(p=>p<=totalPages);
       const extra=await Promise.all(extraPages.map(pg=>fetchPageItems(pg,isNew)));
       if(_loadingAbort){isLoadingMore=false;return;}
@@ -522,6 +524,11 @@ async function loadMovies(reset){
   hideEmpty();
   appendCards(toShow);
   isLoadingMore=false;
+  // On large screens the sentinel may still be visible after first load — trigger more if needed
+  if(reset) setTimeout(()=>{
+    const s=document.getElementById('load-sentinel');
+    if(s){const r=s.getBoundingClientRect();if(r.top<window.innerHeight+800&&currentPage<=totalPages&&!isLoadingMore){loadMovies(false);}}
+  },300);
   // Background: rest of providers
   (async()=>{
     for(let i=bsz;i<toShow.length;i++){
