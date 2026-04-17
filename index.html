@@ -45,7 +45,11 @@ body{background:var(--bg);font-family:'DM Sans',sans-serif;color:var(--text);ove
 @media(min-width:901px){#topbar-drawer{display:none !important;}}
 
 /* ── FILTER BAR ── */
-#filter-bar{position:fixed;top:52px;left:0;right:0;z-index:999;background:#1a1a1a;border-bottom:1px solid #2a2a2a;padding:5px 16px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-height:38px;}
+#filter-bar{position:fixed;top:52px;left:0;right:0;z-index:999;background:#1a1a1a;border-bottom:1px solid #2a2a2a;padding:4px 16px 6px;display:flex;flex-direction:column;gap:4px;}
+.fb-row1{display:flex;align-items:center;gap:6px;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;min-height:30px;}
+.fb-row1::-webkit-scrollbar{display:none;}
+.fb-row2,.fb-row3{display:flex;align-items:center;gap:4px;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;min-height:28px;}
+.fb-row2::-webkit-scrollbar,.fb-row3::-webkit-scrollbar{display:none;}
 .filter-chip{background:#2a2a2a;color:#aaa;border:1px solid #3a3a3a;padding:3px 10px;border-radius:20px;font-size:11px;font-family:'DM Sans',sans-serif;cursor:pointer;transition:all .15s;white-space:nowrap;-webkit-tap-highlight-color:transparent;}
 .filter-chip:hover{background:#333;color:#ddd;}
 .filter-chip.active{background:var(--accent);color:#fff;border-color:var(--accent);}
@@ -82,8 +86,8 @@ body{background:var(--bg);font-family:'DM Sans',sans-serif;color:var(--text);ove
 .card-no-poster span{font-size:11px;font-weight:700;color:#555;line-height:1.3;word-break:break-word;}
 
 /* corner buttons */
-.cb{position:absolute;z-index:10;width:26px;height:20px;background:rgba(0,0,0,.62);border:none;border-radius:4px;cursor:pointer;display:flex;align-items:center;justify-content:center;opacity:.55;transition:opacity .15s,background .15s;-webkit-tap-highlight-color:transparent;}
-.cb:hover,.movie-card:hover .cb{opacity:1;}
+.cb{position:absolute;z-index:10;width:26px;height:20px;background:rgba(0,0,0,.62);border:none;border-radius:4px;cursor:pointer;display:flex;align-items:center;justify-content:center;opacity:1;-webkit-tap-highlight-color:transparent;}
+
 .cb svg{width:11px;height:11px;display:block;stroke:#fff;fill:none;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;}
 /* positions */
 .cb-tl{top:5px;left:5px;}
@@ -149,7 +153,7 @@ body{background:var(--bg);font-family:'DM Sans',sans-serif;color:var(--text);ove
 .btn-cancel:hover{background:var(--bg2);}
 /* info modal */
 .info-inner{display:flex;gap:14px;}
-.info-poster{width:90px;min-width:90px;height:135px;object-fit:cover;border-radius:7px;background:var(--bg2);display:block;}
+.info-poster{object-fit:cover;border-radius:7px;background:var(--bg2);display:block;}
 .info-body{flex:1;min-width:0;}
 .info-badges{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px;}
 .info-badge{font-size:10px;font-weight:700;padding:2px 7px;border-radius:3px;}
@@ -159,7 +163,15 @@ body{background:var(--bg);font-family:'DM Sans',sans-serif;color:var(--text);ove
 .info-plats{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px;}
 .info-plat{display:inline-flex;align-items:center;gap:4px;background:#f5f2ee;border:1px solid var(--border);border-radius:4px;padding:2px 7px;font-size:10px;color:#555;}
 .info-plat img{width:13px;height:13px;object-fit:contain;border-radius:2px;}
-.info-synopsis{font-size:12px;color:#777;line-height:1.6;max-height:120px;overflow-y:auto;}
+.info-synopsis{font-size:12px;color:#777;line-height:1.6;}
+.info-director{font-size:12px;color:#666;margin-bottom:6px;}
+.info-cast{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;}
+.cast-item{display:flex;flex-direction:column;align-items:center;gap:3px;width:52px;}
+.cast-photo{width:44px;height:44px;border-radius:50%;object-fit:cover;flex-shrink:0;background:var(--bg2);}
+.cast-no-photo{display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:#999;background:var(--bg2);}
+.cast-name{font-size:9px;color:#777;text-align:center;line-height:1.2;word-break:break-word;}
+.modal-box.info-wide{max-width:640px;}
+.info-poster{width:130px;min-width:130px;height:195px;}
 /* github steps */
 .key-steps{margin-bottom:12px;display:flex;flex-direction:column;}
 .key-step{font-size:12px;color:#555;line-height:1.6;display:flex;gap:12px;align-items:flex-start;padding:8px 0;border-bottom:1px solid #eee;}
@@ -368,18 +380,33 @@ async function tmdbGet(path){
   }catch{return null;}
 }
 
+// Genre name → IDs lookup for movie and tv
+const MOVIE_GENRE_IDS=Object.fromEntries(Object.entries(MOVIE_GENRES).map(([id,name])=>[name,id]));
+const TV_GENRE_IDS=Object.fromEntries(Object.entries(TV_GENRES).map(([id,name])=>[name,id]));
+
 function buildDiscoverUrl(mediaType,page,forNew){
-  // For 'new' viewMode: release_date.desc; for genre selected: vote_average.desc; default: release_date.desc
-  const sort=(activeGenres.size>0&&!forNew)?'vote_average.desc':'release_date.desc';
+  const isNew=forNew||viewMode==='new';
+  const sort=(activeGenres.size>0&&!isNew)?'vote_average.desc':'release_date.desc';
   const voteMin=sort==='vote_average.desc'?'&vote_count.gte=50':'&vote_count.gte=10';
-  const genreParam=activeGenres.size>0?`&with_genres=${[...activeGenres].join(',')}`:'';
-  const provParam=activeProviders.size>0?`&with_watch_providers=${[...activeProviders].map(pid=>{const e=Object.entries(PROVIDER_MAP).find(([,v])=>v.id===pid);return e?e[0]:null;}).filter(Boolean).join('|')}`:'';
+  // Convert genre names to IDs for this media type
+  const gidMap=mediaType==='tv'?TV_GENRE_IDS:MOVIE_GENRE_IDS;
+  const genreIds=[...activeGenres].map(g=>gidMap[g]).filter(Boolean);
+  const genreParam=genreIds.length>0?`&with_genres=${genreIds.join(',')}`:'';
+  // Provider: get all numeric IDs for selected provider ids (there can be duplicates like prime=9,119)
+  const provIds=[];
+  if(activeProviders.size>0){
+    [...activeProviders].forEach(pid=>{
+      Object.entries(PROVIDER_MAP).forEach(([numId,p])=>{if(p.id===pid&&!provIds.includes(numId))provIds.push(numId);});
+    });
+  }
+  const provParam=provIds.length>0?`&with_watch_providers=${provIds.join('|')}`:'';
   const eraParam=`&primary_release_date.gte=${eraMin}-01-01&primary_release_date.lte=${eraMax}-12-31`;
   const tvEra=`&first_air_date.gte=${eraMin}-01-01&first_air_date.lte=${eraMax}-12-31`;
   if(mediaType==='movie'){
     return `/discover/movie?language=es-ES&region=ES&sort_by=${sort}${voteMin}&vote_average.gte=5&watch_region=ES&with_watch_monetization_types=flatrate&include_adult=false&page=${page}${genreParam}${provParam}${eraParam}`;
   } else {
-    return `/discover/tv?language=es-ES&sort_by=${sort.replace('release','first_air')}&vote_count.gte=10&vote_average.gte=5&watch_region=ES&with_watch_monetization_types=flatrate&include_adult=false&page=${page}${genreParam}${provParam}${tvEra}`;
+    const tvSort=sort==='vote_average.desc'?'vote_average.desc':'first_air_date.desc';
+    return `/discover/tv?language=es-ES&sort_by=${tvSort}&vote_count.gte=10&vote_average.gte=5&watch_region=ES&with_watch_monetization_types=flatrate&include_adult=false&page=${page}${genreParam}${provParam}${tvEra}`;
   }
 }
 
@@ -428,18 +455,30 @@ async function loadMovies(reset){
     clearGrid();setLoading(true,'Cargando…');setLoadingBar(0);
   }
   isLoadingMore=true;
-  const page=currentPage;
-  const items=await fetchPageItems(page,viewMode==='new');
+  const isNew=viewMode==='new';
+  // On reset, fetch 4 pages in parallel to get ~100 items fast
+  const pagesToFetch=reset?[1,2,3,4]:[currentPage];
+  if(reset)currentPage=5;
+  let allFetched=[];
+  await Promise.all(pagesToFetch.map(async pg=>{
+    const items=await fetchPageItems(pg,isNew);
+    allFetched.push(...items);
+  }));
   if(_loadingAbort){isLoadingMore=false;return;}
-  const toShow=items.filter(x=>!discardedSet.has(String(x.id))&&!watchedSet.has(String(x.id)));
+  // Sort combined results
+  if(activeGenres.size>0&&!isNew) allFetched.sort((a,b)=>(b.vote_average||0)-(a.vote_average||0));
+  else allFetched.sort((a,b)=>{const da=a.release_date||a.first_air_date||'';const db=b.release_date||b.first_air_date||'';return db.localeCompare(da);});
+  // Deduplicate
+  const seen=new Set(allItems.map(x=>String(x.id)));
+  const toShow=allFetched.filter(x=>!seen.has(String(x.id))&&!discardedSet.has(String(x.id))&&!watchedSet.has(String(x.id)));
+  if(!reset) currentPage++;
   allItems=[...allItems,...toShow];
-  currentPage++;
   setLoadingBar(80);
   // Load providers for first batch
-  const bsz=Math.min(10,toShow.length);
+  const bsz=Math.min(12,toShow.length);
   await Promise.all(toShow.slice(0,bsz).map(async m=>{m._providers=await fetchProviders(m.id,m._mediaType);}));
   setLoading(false);
-  if(!allItems.length&&page===1){showEmpty('Sin resultados para este filtro');isLoadingMore=false;return;}
+  if(!allItems.length&&reset){showEmpty('Sin resultados para este filtro');isLoadingMore=false;return;}
   hideEmpty();
   appendCards(toShow);
   isLoadingMore=false;
@@ -615,19 +654,19 @@ function renderFilterBar(){
   const hasActive=mediaTypeFilter||activeProviders.size||activeGenres.size||eraMin>MIN_YEAR||eraMax<MAX_YEAR||viewMode;
 
   bar.innerHTML=`
-    ${mtHtml}
-    <div class="filter-sep"></div>
-    ${viewModeHtml}
-    <div class="filter-sep"></div>
-    <button class="filter-toggle-btn ${showPlatforms?'on':'off'}" onclick="toggleShowPlatforms()">${eyeSvg} Plataformas</button>
-    <button class="filter-toggle-btn ${showRatings?'on':'off'}" onclick="toggleShowRatings()">${starSvg} Nota</button>
-    <div class="filter-sep"></div>
-    ${platHtml}
-    <div class="filter-sep"></div>
-    ${genreHtml}
-    <div class="filter-sep"></div>
-    ${eraHtml}
-    ${hasActive?`<button class="filter-clear" onclick="clearFilters()">✕ Limpiar</button>`:''}
+    <div class="fb-row1">
+      ${mtHtml}
+      <div class="filter-sep"></div>
+      ${viewModeHtml}
+      <div class="filter-sep"></div>
+      <button class="filter-toggle-btn ${showPlatforms?'on':'off'}" onclick="toggleShowPlatforms()">${eyeSvg} Plataformas</button>
+      <button class="filter-toggle-btn ${showRatings?'on':'off'}" onclick="toggleShowRatings()">${starSvg} Nota</button>
+      <div class="filter-sep"></div>
+      ${eraHtml}
+      ${hasActive?`<button class="filter-clear" onclick="clearFilters()">✕ Limpiar</button>`:''}
+    </div>
+    <div class="fb-row2">${platHtml}</div>
+    <div class="fb-row3">${genreHtml}</div>
   `;
   updateEraSlider();
 }
@@ -679,6 +718,7 @@ function startEraThumb(e,which){
     document.removeEventListener('mousemove',move);document.removeEventListener('mouseup',up);
     document.removeEventListener('touchmove',move);document.removeEventListener('touchend',up);
     _eraThumbActive=null;
+    if(viewMode==='new'){viewMode=null;renderFilterBar();}
     loadMovies(true);
   };
   document.addEventListener('mousemove',move);document.addEventListener('mouseup',up);
@@ -728,7 +768,7 @@ function appendCards(items){
         <button class="cb cb-br cb-fa" onclick="event.stopPropagation();openFA('${id}')" title="FilmAffinity"><img src="${FA_ICON}" alt="FA"></button>
         ${watchedOv}${discardedOv}
         <div class="card-action-overlay" id="cao-${id}">
-          <button class="cao-btn cao-quarantine" onclick="event.stopPropagation();doDiscard('${id}')">🔴 Cuarentena</button>
+          <button class="cao-btn cao-quarantine" onclick="event.stopPropagation();doDiscard('${id}')"> Cuarentena</button>
           <button class="cao-btn cao-watched" onclick="event.stopPropagation();doWatch('${id}')">✓ Vista</button>
           <button class="cao-btn cao-cancel" onclick="event.stopPropagation();closeActionOverlay('${id}')">✕ Salir</button>
         </div>
@@ -802,19 +842,33 @@ async function openInfoModal(id){
   const m=allItems.find(x=>String(x.id)===String(id))||_specialCache.find(x=>String(x.id)===String(id));if(!m)return;
   const year=(m.release_date||m.first_air_date||'').slice(0,4);
   const rating=m.vote_average?Math.round(m.vote_average*10)/10:null;
-  const poster=m.poster_path?IMG185+m.poster_path:'';
+  const poster=m.poster_path?IMG500+m.poster_path:'';
   const genreMap=m._mediaType==='tv'?TV_GENRES:MOVIE_GENRES;
   const genres=(m.genre_ids||[]).map(gid=>genreMap[gid]).filter(Boolean);
   if(!m._providers)m._providers=await fetchProviders(m.id,m._mediaType);
-  if(!m._overview){
-    const t=m._mediaType==='tv'?'tv':'movie';
-    const d=await tmdbGet(`/${t}/${m.id}?language=es-ES`);
-    if(d){m._overview=d.overview||'';if(m._mediaType==='tv')m._seasons=d.number_of_seasons;else m._runtime=d.runtime;m._originalTitle=d.original_title||d.original_name;}
+  // Fetch full details + credits
+  const t=m._mediaType==='tv'?'tv':'movie';
+  if(!m._credsFetched){
+    m._credsFetched=true;
+    const [detD,credD]=await Promise.all([
+      tmdbGet(`/${t}/${m.id}?language=es-ES`),
+      tmdbGet(`/${t}/${m.id}/credits?language=es-ES`)
+    ]);
+    if(detD){m._overview=detD.overview||'';if(m._mediaType==='tv'){m._seasons=detD.number_of_seasons;}else{m._runtime=detD.runtime;}m._originalTitle=detD.original_title||detD.original_name;}
+    if(credD){
+      const crew=credD.crew||[];
+      m._director=crew.filter(x=>x.job==='Director'||x.known_for_department==='Directing'&&x.job==='Director').slice(0,2).map(x=>x.name).join(', ')||'';
+      m._createdBy=(detD?.created_by||[]).map(x=>x.name).join(', ')||m._director;
+      m._cast=(credD.cast||[]).slice(0,8).map(x=>({name:x.name,photo:x.profile_path?'https://image.tmdb.org/t/p/w45'+x.profile_path:''}));
+    }
     const metaEl=document.querySelector(`.movie-card[data-id="${id}"] .card-meta`);if(metaEl)metaEl.textContent=buildMeta(m);
   }
+  const director=m._mediaType==='tv'?(m._createdBy||m._director):(m._director||'');
+  const cast=m._cast||[];
+  const castHtml=cast.length?`<div class="info-cast">${cast.map(a=>`<div class="cast-item">${a.photo?`<img src="${a.photo}" alt="${escHtml(a.name)}" class="cast-photo">`:`<div class="cast-photo cast-no-photo">${escHtml(a.name.charAt(0))}</div>`}<span class="cast-name">${escHtml(a.name)}</span></div>`).join('')}</div>`:'';
   showModal(`
     <button class="modal-close-x" onclick="closeModal()">✕</button>
-    <h2>${escHtml(m.title||m.name||'—')}</h2>
+    <h2 style="font-size:20px;margin-bottom:10px">${escHtml(m.title||m.name||'—')}</h2>
     <div class="info-inner">
       ${poster?`<img class="info-poster" src="${poster}" alt="">`:''}
       <div class="info-body">
@@ -826,10 +880,12 @@ async function openInfoModal(id){
           ${genres.map(g=>`<span class="info-badge genre">${escHtml(g)}</span>`).join('')}
         </div>
         ${(m._providers||[]).length?`<div class="info-plats">${(m._providers).map(p=>`<span class="info-plat">${p.logo?`<img src="${p.logo}" alt="">`:'' }${escHtml(p.name)}</span>`).join('')}</div>`:''}
+        ${director?`<div class="info-director"><strong>${m._mediaType==='tv'?'Creador':'Director'}:</strong> ${escHtml(director)}</div>`:''}
         ${m._overview?`<div class="info-synopsis">${escHtml(m._overview)}</div>`:''}
       </div>
     </div>
-    <div class="modal-actions"><button class="btn-cancel" onclick="closeModal()">Cerrar</button></div>`);
+    ${castHtml}
+    <div class="modal-actions"><button class="btn-cancel" onclick="closeModal()">Cerrar</button></div>`,'info-wide');
 }
 
 // ── KEY MODAL (with GitHub tab) ──
@@ -857,11 +913,11 @@ function openKeyModal(){
     <div id="tab-github" class="modal-tab-content">
       <div class="key-steps">
         <div class="key-step"><span class="key-step-num">1</span><div class="key-step-body">Ve a <a href="https://github.com" target="_blank">github.com</a> e inicia sesión (o regístrate, es gratis).</div></div>
-        <div class="key-step"><span class="key-step-num">2</span><div class="key-step-body">Pulsa <strong>+</strong> → <strong>New repository</strong>. Nombre: <code>movienes</code>. Visibilidad: <strong>Public</strong>. Pulsa <strong>Create repository</strong>.</div></div>
+        <div class="key-step"><span class="key-step-num">2</span><div class="key-step-body">Pulsa <strong>+</strong> → <strong>New repository</strong>. Nombre: <code>movie-nes</code>. Visibilidad: <strong>Public</strong>. Pulsa <strong>Create repository</strong>.</div></div>
         <div class="key-step"><span class="key-step-num">3</span><div class="key-step-body">En el repo recién creado pulsa <strong>Add file → Upload files</strong>. Arrastra el archivo <code>index.html</code>. Pulsa <strong>Commit changes</strong>.</div></div>
         <div class="key-step"><span class="key-step-num">4</span><div class="key-step-body">Ve a <strong>Settings → Pages</strong>. En <em>Branch</em> selecciona <strong>main</strong> y carpeta <strong>/ (root)</strong>. Pulsa <strong>Save</strong>.</div></div>
-        <div class="key-step"><span class="key-step-num">5</span><div class="key-step-body">Espera 1-2 min. Tu URL será: <code>https://tuusuario.github.io/movienes/</code></div></div>
-        <div class="key-step"><span class="key-step-num">6</span><div class="key-step-body">Para actualizar en el futuro: en el repo, <strong>Add file → Upload files</strong> → arrastra el nuevo <code>index.html</code> → <strong>Commit changes</strong>. <em>No uses el editor de lápiz con archivos grandes.</em></div></div>
+        <div class="key-step"><span class="key-step-num">5</span><div class="key-step-body">Espera 1-2 min. Tu URL será: <code>https://tuusuario.github.io/movie-nes/</code></div></div>
+        <div class="key-step"><span class="key-step-num">6</span><div class="key-step-body">Para actualizar en el futuro: en el repo, <strong>Add file → Upload files</strong> → arrastra el nuevo <code>index.html</code> → <strong>Commit changes</strong>. <em>No uses el editor de lápiz con archivos grandes.</em> Espera sobre 1 minuto para que se recargue el contenido.</div></div>
       </div>
     </div>`,'wide');
   setTimeout(()=>document.getElementById('key-inp')?.focus(),50);
