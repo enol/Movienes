@@ -478,26 +478,30 @@ async function fetchProviders(tmdbId,mediaType){
 // ── LOAD / INFINITE SCROLL ──
 async function loadMovies(reset){
   if(!getKey()){setLoading(false);showEmpty('Añade tu API Key de TMDB para empezar');return;}
+  if(isLoadingMore&&!reset) return;
   if(reset){
     _loadingAbort=false;currentPage=1;totalPages=999;allItems=[];_searchResults=[];
     clearGrid();setLoading(true,'Cargando…');setLoadingBar(0);
   }
-  if(isLoadingMore&&!reset)return;
   isLoadingMore=true;
   const isNew=viewMode==='new';
   let allFetched=[];
   if(reset){
-    // Page 1 first to get real totalPages, then 3 more in parallel
+    // Always fetch page 1 first so totalPages is known, then pages 2-4 in parallel
     const first=await fetchPageItems(1,isNew);
+    if(_loadingAbort){isLoadingMore=false;return;}
     allFetched.push(...first);
-    currentPage=2;
     if(totalPages>=2){
-      const extra=await Promise.all([2,3,4].filter(p=>p<=totalPages).map(pg=>fetchPageItems(pg,isNew)));
-      extra.forEach(batch=>allFetched.push(...batch));
-      currentPage=Math.min(5,totalPages+1);
+      const extraPages=[2,3,4].filter(p=>p<=totalPages);
+      const extra=await Promise.all(extraPages.map(pg=>fetchPageItems(pg,isNew)));
+      if(_loadingAbort){isLoadingMore=false;return;}
+      extra.forEach(b=>allFetched.push(...b));
     }
+    currentPage=Math.min(5,totalPages+1);
   } else {
+    if(currentPage>totalPages){isLoadingMore=false;return;}
     const batch=await fetchPageItems(currentPage,isNew);
+    if(_loadingAbort){isLoadingMore=false;return;}
     allFetched.push(...batch);
     currentPage++;
   }
@@ -557,16 +561,15 @@ const sentinel=document.getElementById('load-sentinel');
 const observer=new IntersectionObserver(entries=>{
   const canLoad=entries[0].isIntersecting
     &&!isLoadingMore
-    &&(viewMode===null||viewMode==='new')
-    &&currentPage<=totalPages
-    &&!searchQuery
     &&viewMode!=='watched'
-    &&viewMode!=='discarded';
+    &&viewMode!=='discarded'
+    &&currentPage<=totalPages
+    &&!searchQuery;
   if(canLoad){
     document.getElementById('load-more-indicator').classList.add('on');
     loadMovies(false).then(()=>document.getElementById('load-more-indicator').classList.remove('on'));
   }
-},{rootMargin:'400px'});
+},{rootMargin:'600px'});
 observer.observe(sentinel);
 
 // ── WATCHED / DISCARDED VIEWS ──
